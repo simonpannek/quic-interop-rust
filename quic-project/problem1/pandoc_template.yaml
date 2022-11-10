@@ -1,0 +1,8 @@
+---
+documentclass: paper
+classoption: english,9pt
+papersize: A4
+mainfont: DejaVuSerif.ttf
+sansfont: DejaVuSans.ttf
+geometry: top=1.9cm,bottom=2cm,left=2cm,right=2cm
+---
