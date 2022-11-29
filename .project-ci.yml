@@ -1,0 +1,4 @@
+stages:
+  - verify
+  - build
+  - test
