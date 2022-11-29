@@ -60,7 +60,7 @@ g) Final configuration of the `implementation.json` file:
 }
 ```
 
-h) Stdout:
+h) Stdout running all the test:
 
 
 ```
@@ -183,6 +183,82 @@ Run took 0:02:13.996302
 +------+---------------------------+
 Exporting results to logs_2022-11-27T18:28:44/result.json
 python3 run.py  20.24s user 17.73s system 28% cpu 2:14.15 total
+```
+
+Stdout running `python3 run.py -d -t handshake`:
+
+```
+Running None False
+Saving logs to logs_2022-11-29T12:13:08
+Servers: name
+Clients: name
+Testcases: handshake
+Create venv: /tmp/name-server
+Setup:
+ . /tmp/name-server/bin/activate; ./setup-env.sh
+
+
+. /tmp/name-server/bin/activate; TESTCASE=wldogo DOWNLOADS=/tmp/compliance_downloads_5db1bjtc LOGS=/tmp/logs_bcz0u3fh QLOGDIR=/tmp/logs_bcz0u3fh SSLKEYLOGFILE=/tmp/logs_bcz0u3fh/keys.log IP=localhost PORT=4433 CERTS=/tmp/compliance_certs_28otlww5 WWW=/tmp/compliance_www_r3dv2g7m ./run-server.sh
+name server compliant.
+Create venv: /tmp/name-client
+Setup:
+ . /tmp/name-client/bin/activate; ./setup-env.sh
+
+Running with server name (/root/acn-quic-example) and client name (/root/acn-quic-example)
+
+. /tmp/name-client/bin/activate; TESTCASE=hxnyof DOWNLOADS=/tmp/compliance_downloads_sfztrvcu LOGS=/tmp/logs_ervv8_tj QLOGDIR=/tmp/logs_ervv8_tj SSLKEYLOGFILE=/tmp/logs_ervv8_tj/keys.log IP=localhost PORT=4433 CERTS=/tmp/compliance_certs_xxmliro6 WWW=/tmp/compliance_www_ls4sh3kj ./run-client.sh
+name client compliant.
+
+---
+1/1
+Test: handshake
+Server: name  Client: name
+---
+Generated random file: /tmp/www_zxd5y9qo/lopcrmodym of size: 1024
+Requests: https://server:4433/lopcrmodym
+
+Starting tcpdump on lo
+Starting server:
+ . /tmp/name-server/bin/activate; SSLKEYLOGFILE=/tmp/logs_server_5je22d7w/keys.log QLOGDIR=/tmp/logs_server_5je22d7w/server_qlog/ LOGS=/tmp/logs_server_5je22d7w TESTCASE=handshake WWW=/tmp/www_zxd5y9qo/ CERTS=/tmp/certs_f_xvda_q/ IP=127.0.0.1 PORT=4433 SERVERNAME=server ./run-server.sh
+
+Starting client:
+ . /tmp/name-client/bin/activate; SSLKEYLOGFILE=/tmp/logs_client_d5tpytzg/keys.log QLOGDIR=/tmp/logs_client_d5tpytzg/client_qlog/ LOGS=/tmp/logs_client_d5tpytzg TESTCASE=handshake DOWNLOADS=/tmp/download_7a2pybvi/ REQUESTS="https://server:4433/lopcrmodym" ./run-client.sh
+
+process psutil.Process(pid=794, status='terminated', started='12:13:12') terminated with exit code None
+process psutil.Process(pid=797, status='terminated', started='12:13:14') terminated with exit code None
+process psutil.Process(pid=800, status='terminated', started='12:13:14') terminated with exit code None
+Client stdout
+client exited with code 0
+
+tcpdump stderr
+tcpdump: listening on lo, link-type EN10MB (Ethernet), snapshot length 262144 bytes
+15 packets captured
+30 packets received by filter
+0 packets dropped by kernel
+
+Server stderr
+Terminated
+
+Using the client's key log file.
+Using selector: EpollSelector
+Check of downloaded files succeeded.
+Using the client's key log file.
+Test successful
+Test took 9.883061s
+
+
+Run took 0:00:13.665528
+
+↓clients/servers→
++------+------+
+|      | name |
++------+------+
+| name |  H   |
+|      |      |
+|      |      |
++------+------+
+Exporting results to logs_2022-11-29T12:13:08/result.json
+python3 run.py -d -t handshake  4.59s user 1.11s system 40% cpu 13.941 total
 ```
 
 # Bibliography
