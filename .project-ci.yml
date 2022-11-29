@@ -2,3 +2,33 @@ stages:
   - verify
   - build
   - test
+
+build:
+  stage: build
+  only:
+    - main
+  image: "gitlab.lrz.de:5005/acn/terms/2022ws/container/debian_bullseye:latest"
+  script:
+    - cd quic-project/implementation
+    - ./build.sh
+    - mv artifact.zip $CI_PROJECT_DIR
+  artifacts:
+    paths:
+      - artifact.zip
+
+run_test:
+  stage: test
+  only:
+    - main
+  image: "gitlab.lrz.de:5005/acn/terms/2022ws/container/interop_runner:latest"
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - unzip artifact.zip -d /tmp
+    - (cd /quic-interop-runner && python3 run.py -d -t handshake)
+    - mv /quic-interop-runner/logs_* $CI_PROJECT_DIR
+  artifacts:
+    paths:
+      - "logs_*"
+
