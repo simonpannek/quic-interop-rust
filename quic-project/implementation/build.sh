@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Build client & server
+cargo build --release
+
 # Version
 git rev-parse HEAD > VERSION
 
