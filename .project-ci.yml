@@ -7,7 +7,7 @@ build:
   stage: build
   only:
     - main
-  image: "gitlab.lrz.de:5005/acn/terms/2022ws/container/debian_bullseye:latest"
+  image: "rust:latest"
   script:
     - cd quic-project/implementation
     - ./build.sh
