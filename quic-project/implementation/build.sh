@@ -1,5 +1,6 @@
 #!/bin/bash
 
+uname -a
 # Build client & server
 cargo build --release
 
