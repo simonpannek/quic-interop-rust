@@ -15,7 +15,7 @@ async fn main() {
     // Setup log file if set
     if let Some(logs) = var("LOGS").ok() {
         // Set log file
-        let log_file = FileAppender::builder().build(logs).expect("failed to set log file");
+        let log_file = FileAppender::builder().build(format!("{}/server.log", logs)).expect("failed to set log file");
 
         // Create logger config
         let config = Config::builder()
