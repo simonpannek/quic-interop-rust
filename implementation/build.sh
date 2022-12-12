@@ -1,5 +1,9 @@
 #!/bin/bash
 
+# Install zip 🥴
+apt update
+apt install -y zip
+
 # Build client & server
 cargo build --release
 
