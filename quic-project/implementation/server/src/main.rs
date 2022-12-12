@@ -1,4 +1,4 @@
-use std::{env::var, fs, path::Path, sync::Arc};
+use std::{env::var, fs, path::Path, sync::Arc, process};
 
 use anyhow::{bail, Context, Error, Result};
 use log::{error, info, LevelFilter};
@@ -12,16 +12,8 @@ use rustls_pemfile::Item::{ECKey, PKCS8Key, RSAKey};
 
 #[tokio::main]
 async fn main() {
-    // Get paths if set
-    let _qlogdir = var("QLOGDIR").ok();
-    let logs = var("LOGS").ok();
-    let www: Arc<Path> = var("WWW")
-        .as_ref()
-        .map(|path| Arc::from(Path::new(path)))
-        .expect("www directory needs to be set");
-
     // Setup log file if set
-    if let Some(logs) = logs {
+    if let Some(logs) = var("LOGS").ok() {
         // Set log file
         let log_file = FileAppender::builder().build(logs).expect("failed to set log file");
 
@@ -32,6 +24,27 @@ async fn main() {
 
         log4rs::init_config(config).expect("failed to create logger");
     }
+
+    // Check test case
+    match var("TESTCASE").ok().as_deref() {
+        Some("handshake") => {
+        }
+        Some(unknown) => {
+            error!("unknown test case: {}", unknown);
+            process::exit(127);
+        }
+        None => {
+            error!("no test case set");
+            process::exit(127);
+        }
+    }
+
+    // Get paths if set
+    let _qlogdir = var("QLOGDIR").ok();
+    let www: Arc<Path> = var("WWW")
+        .as_ref()
+        .map(|path| Arc::from(Path::new(path)))
+        .expect("www directory needs to be set");
 
     let config = create_config().expect("failed to create config");
 
