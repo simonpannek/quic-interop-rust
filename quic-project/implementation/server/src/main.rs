@@ -1,18 +1,37 @@
 use std::{env::var, fs, path::Path, sync::Arc};
 
 use anyhow::{bail, Context, Error, Result};
+use log::{error, info, LevelFilter};
+use log4rs::{
+    append::file::FileAppender,
+    config::{Appender, Root},
+    Config,
+};
 use quinn::{Connecting, Endpoint, ServerConfig};
 use rustls_pemfile::Item::{ECKey, PKCS8Key, RSAKey};
 
 #[tokio::main]
 async fn main() {
-    // Find paths if set
-    let _qlogdir = var("QLOGDIR").ok().as_ref().map(|path| Path::new(path));
-    let _logs = var("LOGS").ok().as_ref().map(|path| Path::new(path));
+    // Get paths if set
+    let _qlogdir = var("QLOGDIR").ok();
+    let logs = var("LOGS").ok();
     let www: Arc<Path> = var("WWW")
         .as_ref()
         .map(|path| Arc::from(Path::new(path)))
         .expect("www directory needs to be set");
+
+    // Setup log file if set
+    if let Some(logs) = logs {
+        // Set log file
+        let log_file = FileAppender::builder().build(logs).expect("failed to set log file");
+
+        // Create logger config
+        let config = Config::builder()
+            .appender(Appender::builder().build("logfile", Box::new(log_file)))
+            .build(Root::builder().appender("logfile").build(LevelFilter::Info)).expect("failed to create logger config");
+
+        log4rs::init_config(config).expect("failed to create logger");
+    }
 
     let config = create_config().expect("failed to create config");
 
@@ -28,13 +47,18 @@ async fn main() {
     )
     .expect("failed to create connection endpoint");
 
+    info!(
+        "Starting to listen on {}.",
+        server.local_addr().expect("failed to fetch local address")
+    );
+
     // Handle new connections until the endpoint is closed
     while let Some(connection) = server.accept().await {
         let handle = handle_connection(www.clone(), connection);
 
         tokio::spawn(async move {
-            if let Err(_why) = handle.await {
-                todo!("log error")
+            if let Err(why) = handle.await {
+                error!("failed to handle connection: {}", why);
             }
         });
     }
