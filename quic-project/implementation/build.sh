@@ -1,5 +1,6 @@
 #!/bin/bash
 
+apt update
 apt install -y zip
 # Build client & server
 cargo build --release
