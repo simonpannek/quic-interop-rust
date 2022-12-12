@@ -1,6 +1,6 @@
 #!/bin/bash
 
-uname -a
+apt install -y zip
 # Build client & server
 cargo build --release
 
