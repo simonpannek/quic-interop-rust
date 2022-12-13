@@ -1,13 +1,14 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
-use anyhow::{Result};
+use anyhow::Result;
 use log::{error, info, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
     config::{Appender, Root},
     Config,
 };
-use quinn::{ClientConfig, Endpoint, Connection};
+use quinn::{ClientConfig, Connecting, Endpoint};
+use tokio::{fs::File, io::AsyncWriteExt};
 use url::Url;
 
 #[tokio::main]
@@ -43,7 +44,7 @@ async fn main() {
 
     // Get paths if set
     let _qlogdir = var("QLOGDIR").ok();
-    let _downloads: Arc<Path> = var("DOWNLOADS")
+    let downloads: Arc<Path> = var("DOWNLOADS")
         .as_ref()
         .map(|path| Arc::from(Path::new(path)))
         .expect("www directory needs to be set");
@@ -64,10 +65,7 @@ async fn main() {
     for url in requests {
         // Get connection address
         let host_str = url.host_str().expect("host string not set");
-        let remote = (
-            host_str,
-            url.port().unwrap_or(4433),
-        )
+        let remote = (host_str, url.port().unwrap_or(4433))
             .to_socket_addrs()
             .expect("failed to parse addresses")
             .next()
@@ -80,17 +78,12 @@ async fn main() {
             .connect(remote, host_str)
             .expect("failed to create connection");
 
+        let handle = connect(downloads.clone(), url, connection);
+
         // Connect to the server
         tokio::spawn(async move {
-            match connection.await {
-                Ok(connection) => {
-                    if let Err(why) = connect(url, connection).await {
-                        error!("failure after connecting to the server: {}", why);
-                    }
-                },
-                Err(why) => {
-                    error!("failure connecting to the server: {}", why);
-                }
+            if let Err(why) = handle.await {
+                error!("failed to connect to the server: {}", why);
             }
         });
     }
@@ -110,6 +103,25 @@ fn create_config() -> ClientConfig {
     ClientConfig::new(Arc::new(crypto_config))
 }
 
-async fn connect(_url: Url, _connection: Connection) -> Result<()> {
+async fn connect(downloads: Arc<Path>, url: Url, connection: Connecting) -> Result<()> {
+    let connection = connection.await?;
+
+    let (mut send, recv) = connection.open_bi().await?;
+
+    // Send request
+    let request = format!("GET {}\r\n", url.path());
+    send.write_all(request.as_bytes()).await?;
+    send.finish().await?;
+
+    // Get response
+    let response = recv.read_to_end(usize::max_value()).await?;
+
+    let file_name = Path::new(url.path()).file_name().unwrap_or_default();
+    let path = downloads.to_path_buf().join(file_name);
+
+    // Write response to file
+    let mut file = File::create(path).await?;
+    file.write_all(&response).await?;
+
     Ok(())
 }
