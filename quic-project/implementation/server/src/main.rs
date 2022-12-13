@@ -1,14 +1,18 @@
 use std::{env::var, fs, path::Path, sync::Arc, process};
 
 use anyhow::{bail, Context, Error, Result};
-use log::{error, info, LevelFilter};
+use log::{error, info, debug, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
     config::{Appender, Root},
     Config,
 };
-use quinn::{Connecting, Endpoint, ServerConfig};
+use quinn::{Connecting, Endpoint, ServerConfig, ConnectionError::ApplicationClosed, SendStream, RecvStream};
 use rustls_pemfile::Item::{ECKey, PKCS8Key, RSAKey};
+use tokio::{fs::File, io::AsyncReadExt};
+
+// Set recv limit on socket to 8KiB
+const RECV_LIMIT: usize = 8192;
 
 #[tokio::main]
 async fn main() {
@@ -118,6 +122,64 @@ fn create_config() -> Result<ServerConfig> {
     Ok(config)
 }
 
-async fn handle_connection(_www: Arc<Path>, _connection: Connecting) -> Result<()> {
+async fn handle_connection(www: Arc<Path>, connection: Connecting) -> Result<()> {
+    let connection = connection.await?;
+
+    loop {
+        let stream = match connection.accept_bi().await {
+            Ok(stream) => stream,
+            Err(ApplicationClosed { .. }) => {
+                info!("connection closed");
+                return Ok(());
+            },
+            Err(why) => {
+                bail!("connection closed due to unexpected error: {}", why);
+            }
+        };
+
+        let handle = handle_request(www.clone(), stream);
+
+        tokio::spawn(async move {
+            if let Err(why) = handle.await {
+                error!("failed to handle request: {}", why);
+            }
+        });
+    }
+}
+
+async fn handle_request(www: Arc<Path>, (mut send, recv): (SendStream, RecvStream)) -> Result<()> {
+    let request = recv.read_to_end(RECV_LIMIT).await?;
+
+    // Parse request
+    let mut headers = [httparse::EMPTY_HEADER; 16];
+    let mut req = httparse::Request::new(&mut headers);
+    let res = req.parse(&request)?;
+
+    debug!("Received request: {:?}", req);
+
+    // Get path
+    if res.is_partial() {
+        if let Some("GET") = req.method {
+            if let Some(path) = req.path {
+                // Get path
+                let path = www.to_path_buf().join(Path::new(path));
+
+                if !path.exists() {
+                    todo!("add 404 handling");
+                }
+
+                let mut file = File::open(path).await?;
+                let mut buf = Vec::new();
+
+                file.read_to_end(&mut buf).await?;
+
+                send.write_all(&buf).await?;
+                send.finish().await?;
+
+                debug!("Responded to request successfully");
+            }
+        }
+    }
+
     Ok(())
 }
