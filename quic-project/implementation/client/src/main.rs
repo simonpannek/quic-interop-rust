@@ -1,6 +1,7 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
 use anyhow::Result;
+use futures::future::join_all;
 use log::{error, info, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
@@ -29,6 +30,8 @@ async fn main() {
         log4rs::init_config(config).expect("failed to create logger");
     }
 
+    info!("Starting client...");
+
     // Check test case
     match var("TESTCASE").ok().as_deref() {
         Some("handshake") => {}
@@ -47,7 +50,7 @@ async fn main() {
     let downloads: Arc<Path> = var("DOWNLOADS")
         .as_ref()
         .map(|path| Arc::from(Path::new(path)))
-        .expect("www directory needs to be set");
+        .expect("downloads directory needs to be set");
 
     let config = create_config();
 
@@ -61,6 +64,8 @@ async fn main() {
     let requests = requests
         .split_whitespace()
         .filter_map(|url| Url::parse(url).ok());
+
+    let mut handles = Vec::new();
 
     for url in requests {
         // Get connection address
@@ -81,12 +86,14 @@ async fn main() {
         let handle = connect(downloads.clone(), url, connection);
 
         // Connect to the server
-        tokio::spawn(async move {
+        handles.push(tokio::spawn(async move {
             if let Err(why) = handle.await {
                 error!("failed to connect to the server: {}", why);
             }
-        });
+        }));
     }
+
+    join_all(handles).await;
 }
 
 fn create_config() -> ClientConfig {
