@@ -27,8 +27,9 @@ run_test:
   script:
     - unzip artifact.zip -d /tmp
     - (cd /quic-interop-runner && python3 run.py -d -t handshake)
+  after_script:
     - mv /quic-interop-runner/logs_* $CI_PROJECT_DIR
   artifacts:
     paths:
-      - "/quic-interop-runner/logs_*"
+      - "logs_*"
     when: always
