@@ -31,4 +31,4 @@ run_test:
   artifacts:
     paths:
       - "logs_*"
-
+    when: always
