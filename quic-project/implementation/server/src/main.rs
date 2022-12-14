@@ -29,6 +29,8 @@ async fn main() {
         log4rs::init_config(config).expect("failed to create logger");
     }
 
+    info!("Starting server...");
+
     // Check test case
     match var("TESTCASE").ok().as_deref() {
         Some("handshake") => {

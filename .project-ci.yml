@@ -30,5 +30,5 @@ run_test:
     - mv /quic-interop-runner/logs_* $CI_PROJECT_DIR
   artifacts:
     paths:
-      - "logs_*"
+      - "/tmp/"
     when: always
