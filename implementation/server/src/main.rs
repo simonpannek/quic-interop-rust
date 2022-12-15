@@ -13,6 +13,8 @@ use tokio::{fs::File, io::AsyncReadExt};
 
 // Set recv limit on socket to 8KiB
 const RECV_LIMIT: usize = 8192;
+// Set ALPN protocols
+const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3", b"h3-32", b"h3-31", b"h3-30", b"h3-29", b"hq-interop", b"hq-32", b"hq-31", b"hq-30", b"hq-29", b"siduck"];
 
 #[tokio::main]
 async fn main() {
@@ -114,6 +116,8 @@ fn create_config() -> Result<ServerConfig> {
         .with_no_client_auth()
         .with_single_cert(cert_chain, key)
         .context("invalid certificate/key")?;
+
+    crypto_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
     // Set key log file
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());

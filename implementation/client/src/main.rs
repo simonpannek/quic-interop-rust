@@ -12,6 +12,9 @@ use quinn::{ClientConfig, Connecting, Endpoint};
 use tokio::{fs::File, io::AsyncWriteExt};
 use url::Url;
 
+// Set ALPN protocols
+const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3", b"h3-32", b"h3-31", b"h3-30", b"h3-29", b"hq-interop", b"hq-32", b"hq-31", b"hq-30", b"hq-29", b"siduck"];
+
 #[tokio::main]
 async fn main() {
     // Setup log file if set
@@ -102,6 +105,8 @@ fn create_config() -> ClientConfig {
         .with_safe_defaults()
         .with_root_certificates(rustls::RootCertStore::empty())
         .with_no_client_auth();
+
+    crypto_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
     // Set key log file
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());
