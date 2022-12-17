@@ -121,11 +121,15 @@ fn create_config() -> Result<ClientConfig> {
         }
     }
 
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
+    let cert_chain = vec![rustls::Certificate(cert.serialize_der()?)];
+    let key = rustls::PrivateKey(cert.serialize_private_key_der());
+
     // Create crypto config
     let mut crypto_config = rustls::ClientConfig::builder()
         .with_safe_defaults()
         .with_root_certificates(roots)
-        .with_no_client_auth();
+        .with_single_cert(cert_chain, key).context("failed to set client certs")?;
 
     crypto_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
@@ -133,7 +137,7 @@ fn create_config() -> Result<ClientConfig> {
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     // Create client config
-    let config = ClientConfig::with_native_roots();
+    let config = ClientConfig::new(Arc::new(crypto_config));
 
     Ok(config)
 }
