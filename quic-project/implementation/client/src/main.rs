@@ -133,7 +133,7 @@ fn create_config() -> Result<ClientConfig> {
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     // Create client config
-    let config = ClientConfig::new(Arc::new(crypto_config));
+    let config = ClientConfig::with_native_roots();
 
     Ok(config)
 }
