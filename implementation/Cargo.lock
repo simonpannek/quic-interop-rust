@@ -90,6 +90,7 @@ dependencies = [
  "log4rs",
  "quinn",
  "rustls",
+ "rustls-native-certs",
  "tokio",
  "url",
 ]
