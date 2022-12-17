@@ -155,6 +155,7 @@ async fn handle_connection(www: Arc<Path>, connection: Connecting) -> Result<()>
 
 async fn handle_request(www: Arc<Path>, (mut send, recv): (SendStream, RecvStream)) -> Result<()> {
     let request = recv.read_to_end(RECV_LIMIT).await.context("failed to receive the request")?;
+
     info!("{:02X?}", request);
 
     // Parse request

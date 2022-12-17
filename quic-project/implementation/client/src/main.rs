@@ -1,8 +1,8 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use futures::future::join_all;
-use log::{error, info, LevelFilter};
+use log::{error, info, warn, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
     config::{Appender, Root},
@@ -13,7 +13,19 @@ use tokio::{fs::File, io::AsyncWriteExt};
 use url::Url;
 
 // Set ALPN protocols
-const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3", b"h3-32", b"h3-31", b"h3-30", b"h3-29", b"hq-interop", b"hq-32", b"hq-31", b"hq-30", b"hq-29", b"siduck"];
+const ALPN_QUIC_HTTP: &[&[u8]] = &[
+    b"h3",
+    b"h3-32",
+    b"h3-31",
+    b"h3-30",
+    b"h3-29",
+    b"hq-interop",
+    b"hq-32",
+    b"hq-31",
+    b"hq-30",
+    b"hq-29",
+    b"siduck",
+];
 
 #[tokio::main]
 async fn main() {
@@ -55,7 +67,7 @@ async fn main() {
         .map(|path| Arc::from(Path::new(path)))
         .expect("downloads directory needs to be set");
 
-    let config = create_config();
+    let config = create_config().expect("failed to create config");
 
     let mut client =
         Endpoint::client("[::]:0".parse().unwrap()).expect("failed to create connection endpoint");
@@ -99,11 +111,20 @@ async fn main() {
     join_all(handles).await;
 }
 
-fn create_config() -> ClientConfig {
+fn create_config() -> Result<ClientConfig> {
+    // Create root certificate
+    let mut roots = rustls::RootCertStore::empty();
+
+    for cert in rustls_native_certs::load_native_certs().context("failed to load platform certs")? {
+        if let Err(why) = roots.add(&rustls::Certificate(cert.0)) {
+            warn!("failed to parse trust anchor: {}", why);
+        }
+    }
+
     // Create crypto config
     let mut crypto_config = rustls::ClientConfig::builder()
         .with_safe_defaults()
-        .with_root_certificates(rustls::RootCertStore::empty())
+        .with_root_certificates(roots)
         .with_no_client_auth();
 
     crypto_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
@@ -111,8 +132,10 @@ fn create_config() -> ClientConfig {
     // Set key log file
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-    // Return client
-    ClientConfig::new(Arc::new(crypto_config))
+    // Create client config
+    let config = ClientConfig::new(Arc::new(crypto_config));
+
+    Ok(config)
 }
 
 async fn connect(downloads: Arc<Path>, url: Url, connection: Connecting) -> Result<()> {
