@@ -154,12 +154,13 @@ async fn handle_connection(www: Arc<Path>, connection: Connecting) -> Result<()>
 }
 
 async fn handle_request(www: Arc<Path>, (mut send, recv): (SendStream, RecvStream)) -> Result<()> {
-    let request = recv.read_to_end(RECV_LIMIT).await?;
+    let request = recv.read_to_end(RECV_LIMIT).await.context("failed to receive the request")?;
+    info!("{:02X?}", request);
 
     // Parse request
     let mut headers = [httparse::EMPTY_HEADER; 16];
     let mut req = httparse::Request::new(&mut headers);
-    let res = req.parse(&request)?;
+    let res = req.parse(&request).context("failed to parse the request")?;
 
     debug!("Received request: {:?}", req);
 
@@ -174,13 +175,13 @@ async fn handle_request(www: Arc<Path>, (mut send, recv): (SendStream, RecvStrea
                     todo!("add 404 handling");
                 }
 
-                let mut file = File::open(path).await?;
+                let mut file = File::open(path).await.context("failed to open file")?;
                 let mut buf = Vec::new();
 
-                file.read_to_end(&mut buf).await?;
+                file.read_to_end(&mut buf).await.context("failed to read the file")?;
 
-                send.write_all(&buf).await?;
-                send.finish().await?;
+                send.write_all(&buf).await.context("failed to send the file")?;
+                send.finish().await.context("failed to finish the connection")?;
 
                 debug!("Responded to request successfully");
             }
