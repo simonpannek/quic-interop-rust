@@ -121,8 +121,8 @@ fn create_config() -> Result<ClientConfig> {
         }
     }
 
-    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string()])?;
-    let cert_chain = vec![rustls::Certificate(cert.serialize_der()?)];
+    let cert = rcgen::generate_simple_self_signed(vec!["localhost".to_string(), "server".to_string(), var("IP")?])?;
+let cert_chain = vec![rustls::Certificate(cert.serialize_der()?)];
     let key = rustls::PrivateKey(cert.serialize_private_key_der());
 
     // Create crypto config
