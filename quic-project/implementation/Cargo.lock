@@ -112,7 +112,11 @@ name = "client"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "futures",
+ "h3",
+ "h3-quinn",
+ "http",
  "log",
  "log4rs",
  "quinn",
