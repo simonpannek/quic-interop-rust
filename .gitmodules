@@ -4,3 +4,12 @@
 [submodule "quic-project/implementation/--name"]
 	path = quic-project/implementation/--name
 	url = https://github.com/hyperium/h3.git
+[submodule "quic-project/implementation/--h3"]
+	path = quic-project/implementation/--h3
+	url = https://github.com/hyperium/h3.git
+[submodule "quic-project/implementation/--force"]
+	path = quic-project/implementation/--force
+	url = https://github.com/hyperium/h3.git
+[submodule "h3"]
+	path = quic-project/implementation/h3
+	url = https://github.com/hyperium/h3.git
