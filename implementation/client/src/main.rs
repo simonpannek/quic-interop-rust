@@ -20,6 +20,28 @@ use url::Url;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
+struct Verifier;
+
+impl Verifier {
+    fn new() -> Arc<Self> {
+        Arc::new(Self)
+    }
+}
+
+impl rustls::client::ServerCertVerifier for Verifier {
+    fn verify_server_cert(
+        &self,
+        _end_entity: &rustls::Certificate,
+        _intermediates: &[rustls::Certificate],
+        _server_name: &rustls::ServerName,
+        _scts: &mut dyn Iterator<Item = &[u8]>,
+        _ocsp_response: &[u8],
+        _now: std::time::SystemTime,
+    ) -> Result<rustls::client::ServerCertVerified, rustls::Error> {
+        Ok(rustls::client::ServerCertVerified::assertion())
+    }
+}
+
 #[tokio::main]
 async fn main() {
     // Setup log file if set
@@ -122,7 +144,7 @@ fn create_config() -> Result<ClientConfig> {
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .context("failed to set protocol version")?
-        .with_root_certificates(roots)
+        .with_custom_certificate_verifier(Verifier::new())
         .with_no_client_auth();
 
     crypto_config.enable_early_data = true;
