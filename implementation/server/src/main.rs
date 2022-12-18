@@ -1,20 +1,22 @@
 use std::{env::var, fs, path::Path, process, sync::Arc};
 
 use anyhow::{bail, Context, Error, Result};
+use bytes::{Bytes, BytesMut};
+use futures::StreamExt;
+use h3::{server::RequestStream, quic::BidiStream};
+use http::{Method, Request};
 use log::{debug, error, info, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
     config::{Appender, Root},
     Config,
 };
-use quinn::{
-    Connecting, ConnectionError::ApplicationClosed, Endpoint, RecvStream, SendStream, ServerConfig,
-};
+use quinn::{Connecting, Endpoint, ServerConfig};
 use rustls_pemfile::Item::{ECKey, PKCS8Key, RSAKey};
 use tokio::{fs::File, io::AsyncReadExt};
 
-// Set recv limit on socket to 8KiB
-const RECV_LIMIT: usize = 8192;
+// Send buffer size
+const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
@@ -60,7 +62,7 @@ async fn main() {
 
     let config = create_config().expect("failed to create config");
 
-    let server = Endpoint::server(
+    let (server, mut incoming) = Endpoint::server(
         config,
         format!(
             "{}:{}",
@@ -78,7 +80,7 @@ async fn main() {
     );
 
     // Handle new connections until the endpoint is closed
-    while let Some(connection) = server.accept().await {
+    while let Some(connection) = incoming.next().await {
         let handle = handle_connection(www.clone(), connection);
 
         tokio::spawn(async move {
@@ -87,6 +89,9 @@ async fn main() {
             }
         });
     }
+
+    // Wait for connections to close
+    server.wait_idle().await;
 }
 
 fn create_config() -> Result<ServerConfig> {
@@ -139,19 +144,22 @@ fn create_config() -> Result<ServerConfig> {
 async fn handle_connection(www: Arc<Path>, connection: Connecting) -> Result<()> {
     let connection = connection.await?;
 
+    let mut h3_connection =
+        h3::server::Connection::new(h3_quinn::Connection::new(connection)).await?;
+
     loop {
-        let stream = match connection.accept_bi().await {
-            Ok(stream) => stream,
-            Err(ApplicationClosed { .. }) => {
+        let (req, stream) = match h3_connection.accept().await {
+            Ok(Some((req, stream))) => (req, stream),
+            Ok(None) => {
                 info!("connection closed");
                 return Ok(());
             }
             Err(why) => {
-                bail!("connection closed due to unexpected error: {}", why);
+                bail!("stream closed due to unexpected error: {}", why);
             }
         };
 
-        let handle = handle_request(www.clone(), stream);
+        let handle = handle_request(www.clone(), req, stream);
 
         tokio::spawn(async move {
             if let Err(why) = handle.await {
@@ -161,49 +169,39 @@ async fn handle_connection(www: Arc<Path>, connection: Connecting) -> Result<()>
     }
 }
 
-async fn handle_request(www: Arc<Path>, (mut send, recv): (SendStream, RecvStream)) -> Result<()> {
-    let request = recv
-        .read_to_end(RECV_LIMIT)
-        .await
-        .context("failed to receive the request")?;
-
-    info!("{:02X?}", request);
-
-    // Parse request
-    let mut headers = [httparse::EMPTY_HEADER; 16];
-    let mut req = httparse::Request::new(&mut headers);
-    let res = req.parse(&request).context("failed to parse the request")?;
-
+async fn handle_request<T>(
+    www: Arc<Path>,
+    req: Request<()>,
+    mut stream: RequestStream<T, Bytes>,
+) -> Result<()> where T: BidiStream<Bytes> {
     debug!("Received request: {:?}", req);
 
-    // Get path
-    if res.is_partial() {
-        if let Some("GET") = req.method {
-            if let Some(path) = req.path {
-                // Get path
-                let path = www.to_path_buf().join(Path::new(path));
+    match *req.method() {
+        Method::GET => {
+            // Get path
+            let path = www.to_path_buf().join(req.uri().path());
 
-                if !path.exists() {
-                    todo!("add 404 handling");
-                }
+            if !path.exists() {
+                todo!("handle 404: {:?}", path);
+            }
 
                 let mut file = File::open(path).await.context("failed to open file")?;
-                let mut buf = Vec::new();
 
-                file.read_to_end(&mut buf)
-                    .await
-                    .context("failed to read the file")?;
+            loop {
+                let mut buf = BytesMut::with_capacity(SEND_SIZE);
 
-                send.write_all(&buf)
+                if file.read_buf(&mut buf)
                     .await
-                    .context("failed to send the file")?;
-                send.finish()
-                    .await
-                    .context("failed to finish the connection")?;
+                    .context("failed to read the file")? == 0 {
+                        break;
+                    }
 
-                debug!("Responded to request successfully");
+                stream.send_data(buf.freeze()).await?;
             }
+
+            debug!("Responded to request successfully");
         }
+        _ => {}
     }
 
     Ok(())
