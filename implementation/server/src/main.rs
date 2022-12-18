@@ -14,7 +14,7 @@ use tokio::{fs::File, io::AsyncReadExt};
 // Set recv limit on socket to 8KiB
 const RECV_LIMIT: usize = 8192;
 // Set ALPN protocols
-const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3", b"h3-32", b"h3-31", b"h3-30", b"h3-29", b"hq-interop", b"hq-32", b"hq-31", b"hq-30", b"hq-29", b"siduck"];
+const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
 #[tokio::main]
 async fn main() {
