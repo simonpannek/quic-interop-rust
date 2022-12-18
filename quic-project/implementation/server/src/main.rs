@@ -182,7 +182,7 @@ async fn handle_request<T>(
             let path = www.to_path_buf().join(req.uri().path());
 
             if !path.exists() {
-                todo!("handle 404");
+                todo!("handle 404: {:?}", path);
             }
 
                 let mut file = File::open(path).await.context("failed to open file")?;
