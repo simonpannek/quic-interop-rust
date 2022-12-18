@@ -399,12 +399,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "httparse"
-version = "1.8.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d897f394bad6a705d5f4104762e116a75639e470d80901eed05a860a95cb1904"
-
-[[package]]
 name = "humantime"
 version = "2.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -795,6 +789,7 @@ dependencies = [
  "rand",
  "ring",
  "rustls",
+ "rustls-native-certs",
  "rustls-pemfile 0.2.1",
  "slab",
  "thiserror",
@@ -1145,12 +1140,14 @@ name = "server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bytes",
+ "futures",
  "h3",
  "h3-quinn",
- "httparse",
+ "http",
  "log",
  "log4rs",
- "quinn 0.9.3",
+ "quinn 0.8.5",
  "rustls",
  "rustls-pemfile 1.0.1",
  "tokio",
