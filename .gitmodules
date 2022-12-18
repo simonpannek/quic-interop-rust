@@ -1,0 +1,3 @@
+[submodule "quic-project/implementation/h3"]
+	path = quic-project/implementation/h3
+	url = git@github.com:hyperium/h3.git

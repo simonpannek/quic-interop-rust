@@ -1,13 +1,15 @@
-use std::{env::var, fs, path::Path, sync::Arc, process};
+use std::{env::var, fs, path::Path, process, sync::Arc};
 
 use anyhow::{bail, Context, Error, Result};
-use log::{error, info, debug, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
     config::{Appender, Root},
     Config,
 };
-use quinn::{Connecting, Endpoint, ServerConfig, ConnectionError::ApplicationClosed, SendStream, RecvStream};
+use quinn::{
+    Connecting, ConnectionError::ApplicationClosed, Endpoint, RecvStream, SendStream, ServerConfig,
+};
 use rustls_pemfile::Item::{ECKey, PKCS8Key, RSAKey};
 use tokio::{fs::File, io::AsyncReadExt};
 
@@ -21,12 +23,15 @@ async fn main() {
     // Setup log file if set
     if let Some(logs) = var("LOGS").ok() {
         // Set log file
-        let log_file = FileAppender::builder().build(format!("{}/server.log", logs)).expect("failed to set log file");
+        let log_file = FileAppender::builder()
+            .build(format!("{}/server.log", logs))
+            .expect("failed to set log file");
 
         // Create logger config
         let config = Config::builder()
             .appender(Appender::builder().build("logfile", Box::new(log_file)))
-            .build(Root::builder().appender("logfile").build(LevelFilter::Info)).expect("failed to create logger config");
+            .build(Root::builder().appender("logfile").build(LevelFilter::Info))
+            .expect("failed to create logger config");
 
         log4rs::init_config(config).expect("failed to create logger");
     }
@@ -35,8 +40,7 @@ async fn main() {
 
     // Check test case
     match var("TESTCASE").ok().as_deref() {
-        Some("handshake") => {
-        }
+        Some("handshake") => {}
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
             process::exit(127);
@@ -112,11 +116,15 @@ fn create_config() -> Result<ServerConfig> {
 
     // Create crypto config
     let mut crypto_config = rustls::ServerConfig::builder()
-        .with_safe_defaults()
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .context("failed to set protocol version")?
         .with_no_client_auth()
         .with_single_cert(cert_chain, key)
         .context("invalid certificate/key")?;
 
+    crypto_config.max_early_data_size = u32::MAX;
     crypto_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
     // Set key log file
@@ -137,7 +145,7 @@ async fn handle_connection(www: Arc<Path>, connection: Connecting) -> Result<()>
             Err(ApplicationClosed { .. }) => {
                 info!("connection closed");
                 return Ok(());
-            },
+            }
             Err(why) => {
                 bail!("connection closed due to unexpected error: {}", why);
             }
@@ -154,7 +162,10 @@ async fn handle_connection(www: Arc<Path>, connection: Connecting) -> Result<()>
 }
 
 async fn handle_request(www: Arc<Path>, (mut send, recv): (SendStream, RecvStream)) -> Result<()> {
-    let request = recv.read_to_end(RECV_LIMIT).await.context("failed to receive the request")?;
+    let request = recv
+        .read_to_end(RECV_LIMIT)
+        .await
+        .context("failed to receive the request")?;
 
     info!("{:02X?}", request);
 
@@ -179,10 +190,16 @@ async fn handle_request(www: Arc<Path>, (mut send, recv): (SendStream, RecvStrea
                 let mut file = File::open(path).await.context("failed to open file")?;
                 let mut buf = Vec::new();
 
-                file.read_to_end(&mut buf).await.context("failed to read the file")?;
+                file.read_to_end(&mut buf)
+                    .await
+                    .context("failed to read the file")?;
 
-                send.write_all(&buf).await.context("failed to send the file")?;
-                send.finish().await.context("failed to finish the connection")?;
+                send.write_all(&buf)
+                    .await
+                    .context("failed to send the file")?;
+                send.finish()
+                    .await
+                    .context("failed to finish the connection")?;
 
                 debug!("Responded to request successfully");
             }
