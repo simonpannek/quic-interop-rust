@@ -7,7 +7,7 @@ build:
   stage: build
   only:
     - main
-  image: "rust:latest"
+  image: "cimg/rust:latest"
   script:
     - cd quic-project/implementation
     - ./build.sh
