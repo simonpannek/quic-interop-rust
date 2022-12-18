@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# Install zip 🥴
-apt update --allow-unauthenticated
-apt install -y zip
-
 # Build client & server
 cargo build --release
 
