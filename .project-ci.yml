@@ -17,6 +17,7 @@ build:
       - artifact.zip
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
+    GIT_SUBMODULE_DEPTH: 1
 
 run_test:
   stage: test
