@@ -142,7 +142,7 @@ fn create_config() -> Result<ClientConfig> {
 async fn connect(downloads: Arc<Path>, url: Url, connection: Connecting) -> Result<()> {
     let connection = connection.await?;
 
-    let (mut send, recv) = connection.open_bi().await?;
+    /*let (mut send, recv) = connection.open_bi().await?;
 
     // Send request
     let request = format!("GET {}\r\n", url.path());
@@ -157,7 +157,7 @@ async fn connect(downloads: Arc<Path>, url: Url, connection: Connecting) -> Resu
 
     // Write response to file
     let mut file = File::create(path).await?;
-    file.write_all(&response).await?;
+    file.write_all(&response).await?;*/
 
     Ok(())
 }
