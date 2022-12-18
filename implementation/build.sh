@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Install zip 🥴
-apt update
+apt update --allow-unauthenticated
 apt install -y zip
 
 # Build client & server
