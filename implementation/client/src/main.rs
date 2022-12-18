@@ -1,8 +1,13 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
 use anyhow::{Context, Result};
-use futures::future::join_all;
-use log::{error, info, warn, LevelFilter};
+use bytes::{Buf, Bytes};
+use futures::future::{self, join_all};
+use h3::{
+    client::{Connection, SendRequest},
+    quic,
+};
+use log::{debug, error, info, warn, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
     config::{Appender, Root},
@@ -13,19 +18,7 @@ use tokio::{fs::File, io::AsyncWriteExt};
 use url::Url;
 
 // Set ALPN protocols
-const ALPN_QUIC_HTTP: &[&[u8]] = &[
-    b"h3",
-    b"h3-32",
-    b"h3-31",
-    b"h3-30",
-    b"h3-29",
-    b"hq-interop",
-    b"hq-32",
-    b"hq-31",
-    b"hq-30",
-    b"hq-29",
-    b"siduck",
-];
+const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
 #[tokio::main]
 async fn main() {
@@ -109,6 +102,8 @@ async fn main() {
     }
 
     join_all(handles).await;
+
+    client.wait_idle().await;
 }
 
 fn create_config() -> Result<ClientConfig> {
@@ -123,10 +118,14 @@ fn create_config() -> Result<ClientConfig> {
 
     // Create crypto config
     let mut crypto_config = rustls::ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(roots.clone())
+        .with_safe_default_cipher_suites()
+        .with_safe_default_kx_groups()
+        .with_protocol_versions(&[&rustls::version::TLS13])
+        .context("failed to set protocol version")?
+        .with_root_certificates(roots)
         .with_no_client_auth();
 
+    crypto_config.enable_early_data = true;
     crypto_config.alpn_protocols = ALPN_QUIC_HTTP.iter().map(|&x| x.into()).collect();
 
     // Set key log file
@@ -134,7 +133,6 @@ fn create_config() -> Result<ClientConfig> {
 
     // Create client config
     let config = ClientConfig::new(Arc::new(crypto_config));
-    let config = ClientConfig::with_root_certificates(roots);
 
     Ok(config)
 }
@@ -142,22 +140,57 @@ fn create_config() -> Result<ClientConfig> {
 async fn connect(downloads: Arc<Path>, url: Url, connection: Connecting) -> Result<()> {
     let connection = connection.await?;
 
-    /*let (mut send, recv) = connection.open_bi().await?;
+    let (driver, send) = h3::client::new(h3_quinn::Connection::new(connection)).await?;
 
-    // Send request
-    let request = format!("GET {}\r\n", url.path());
-    send.write_all(request.as_bytes()).await?;
-    send.finish().await?;
+    let handle = handle_request(downloads, url, send);
+    let drive = drive_request(driver);
 
-    // Get response
-    let response = recv.read_to_end(usize::max_value()).await?;
+    let (handle_res, drive_res) = tokio::join!(handle, drive);
+    handle_res?;
+    drive_res?;
+
+    Ok(())
+}
+
+async fn drive_request<T>(mut driver: Connection<T, Bytes>) -> Result<()>
+where
+    T: quic::Connection<Bytes>,
+{
+    future::poll_fn(|cx| driver.poll_close(cx)).await?;
+    Ok(())
+}
+
+async fn handle_request<T>(
+    downloads: Arc<Path>,
+    url: Url,
+    mut send: SendRequest<T, Bytes>,
+) -> Result<()>
+where
+    T: quic::OpenStreams<Bytes>,
+{
+    debug!("Sending a request to {}", url);
+
+    let req = http::Request::builder().uri(url.as_str()).body(())?;
+
+    let mut stream = send.send_request(req).await?;
+
+    // finish on the sending side
+    stream.finish().await?;
+
+    debug!("Receiving a response...");
+
+    let resp = stream.recv_response().await?;
+
+    debug!("Response: {:?} {}", resp.version(), resp.status());
 
     let file_name = Path::new(url.path()).file_name().unwrap_or_default();
     let path = downloads.to_path_buf().join(file_name);
 
-    // Write response to file
     let mut file = File::create(path).await?;
-    file.write_all(&response).await?;*/
+
+    while let Some(buf) = stream.recv_data().await? {
+        file.write_all(buf.chunk()).await?;
+    }
 
     Ok(())
 }

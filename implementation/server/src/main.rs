@@ -3,8 +3,8 @@ use std::{env::var, fs, path::Path, process, sync::Arc};
 use anyhow::{bail, Context, Error, Result};
 use bytes::{Bytes, BytesMut};
 use futures::StreamExt;
-use h3::{server::RequestStream, quic::BidiStream};
-use http::{Method, Request};
+use h3::{quic, server::RequestStream};
+use http::{Method, Request, StatusCode};
 use log::{debug, error, info, LevelFilter};
 use log4rs::{
     append::file::FileAppender,
@@ -173,31 +173,45 @@ async fn handle_request<T>(
     www: Arc<Path>,
     req: Request<()>,
     mut stream: RequestStream<T, Bytes>,
-) -> Result<()> where T: BidiStream<Bytes> {
+) -> Result<()>
+where
+    T: quic::BidiStream<Bytes>,
+{
     debug!("Received request: {:?}", req);
 
     match *req.method() {
         Method::GET => {
             // Get path
-            let path = www.to_path_buf().join(req.uri().path());
+            let path = www
+                .to_path_buf()
+                .join(req.uri().path().strip_prefix("/").unwrap_or_default());
 
             if !path.exists() {
                 todo!("handle 404: {:?}", path);
             }
 
-                let mut file = File::open(path).await.context("failed to open file")?;
+            let mut file = File::open(path).await.context("failed to open file")?;
+
+            let response = http::Response::builder().status(StatusCode::OK).body(()).unwrap();
+
+            stream.send_response(response).await?;
 
             loop {
                 let mut buf = BytesMut::with_capacity(SEND_SIZE);
 
-                if file.read_buf(&mut buf)
+                if file
+                    .read_buf(&mut buf)
                     .await
-                    .context("failed to read the file")? == 0 {
-                        break;
-                    }
+                    .context("failed to read the file")?
+                    == 0
+                {
+                    break;
+                }
 
                 stream.send_data(buf.freeze()).await?;
             }
+
+            stream.finish().await?;
 
             debug!("Responded to request successfully");
         }
