@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # Install zip 🥴
+apt clean
 apt update
 apt install -y zip
 
