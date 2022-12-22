@@ -2,3 +2,4 @@
 target
 VERSION
 *.zip
+.DS_STORE
