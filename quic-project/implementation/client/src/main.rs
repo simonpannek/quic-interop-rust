@@ -129,7 +129,7 @@ async fn main() {
 
     for i in 0..requests.len() / slice_size {
         let i = i * slice_size;
-        let urls = &requests[i..i + slice_size];
+        let mut urls = &requests[i..i + slice_size];
 
         // Get connection address
         let url = urls.get(0).unwrap();
@@ -156,6 +156,8 @@ async fn main() {
             )
             .await
             .expect("failed to connect to the server");
+
+            urls = &urls[1..];
         }
 
         // Create connection
@@ -166,7 +168,7 @@ async fn main() {
         let handle = connect(
             options.clone(),
             downloads.clone(),
-            Vec::from(&urls[1..]),
+            Vec::from(urls),
             connection,
         );
 
