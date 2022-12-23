@@ -71,6 +71,8 @@ async fn main() {
 
     info!("Starting client...");
 
+    info!("{:?}", var("TESTCASE").ok());
+
     // Check test case
     let options = match var("TESTCASE").ok().as_deref() {
         Some("handshake") => OptionsBuilder::default().build(),
@@ -92,19 +94,6 @@ async fn main() {
         }
     }
     .expect("failed to build options");
-
-    // Check test case
-    match var("TESTCASE").ok().as_deref() {
-        Some("handshake") => {}
-        Some(unknown) => {
-            error!("unknown test case: {}", unknown);
-            process::exit(127);
-        }
-        None => {
-            error!("no test case set");
-            process::exit(127);
-        }
-    }
 
     // Get paths if set
     let _qlogdir = var("QLOGDIR").ok();
