@@ -21,10 +21,12 @@ const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
-#[derive(Builder)]
+#[derive(Builder, Default)]
+#[builder(default)]
 struct Options {
     retry: bool,
     chacha_only: bool,
+    #[builder(setter(strip_option))]
     max_streams: Option<u32>,
 }
 
@@ -58,7 +60,7 @@ async fn main() {
         Some("retry") => OptionsBuilder::default().retry(true).build(),
         Some("resumption") => OptionsBuilder::default().build(),
         Some("zerortt") => OptionsBuilder::default().build(),
-        Some("transportparameter") => OptionsBuilder::default().max_streams(Some(10)).build(),
+        Some("transportparameter") => OptionsBuilder::default().max_streams(10).build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
             process::exit(127);

@@ -21,7 +21,8 @@ use url::Url;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
-#[derive(Builder, Clone)]
+#[derive(Builder, Clone, Default)]
+#[builder(default)]
 struct Options {
     single_connection: bool,
     chacha_only: bool,
@@ -154,7 +155,12 @@ async fn main() {
             .connect(remote, host_str)
             .expect("failed to create connection");
 
-        let handle = connect(options.clone(), downloads.clone(), Vec::from(urls), connection);
+        let handle = connect(
+            options.clone(),
+            downloads.clone(),
+            Vec::from(urls),
+            connection,
+        );
 
         // Connect to the server
         handles.push(tokio::spawn(async move {
@@ -207,7 +213,12 @@ fn create_config(options: &Options) -> Result<ClientConfig> {
     Ok(config)
 }
 
-async fn connect(options: Options, downloads: Arc<Path>, urls: Vec<Url>, connection: Connecting) -> Result<()> {
+async fn connect(
+    options: Options,
+    downloads: Arc<Path>,
+    urls: Vec<Url>,
+    connection: Connecting,
+) -> Result<()> {
     let connection = if options.zero_rtt {
         if let Ok((connection, accepted)) = connection.into_0rtt() {
             assert!(accepted.await);
