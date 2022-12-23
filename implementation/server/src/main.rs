@@ -24,8 +24,11 @@ const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 #[derive(Builder, Default)]
 #[builder(default)]
 struct Options {
+    // Whether to generate a Retry
     retry: bool,
+    // Whether to use TLS_CHACHA20_POLY1305_SHA256 only as a cipher suite
     chacha_only: bool,
+    // The number of maximum streams bidi streams, open at the same time
     #[builder(setter(strip_option))]
     max_streams: Option<u32>,
 }
