@@ -24,8 +24,13 @@ const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 #[derive(Builder, Clone, Default)]
 #[builder(default)]
 struct Options {
+    // Whether to download all files using a single connection
     single_connection: bool,
+    // Whether to use TLS_CHACHA20_POLY1305_SHA256 only as a cipher suite
     chacha_only: bool,
+    // Whether to download the first file using a separate connection
+    first_separate: bool,
+    // Whether to use 0-RTT after reconnecting to a server
     zero_rtt: bool,
 }
 
@@ -70,8 +75,6 @@ async fn main() {
     }
 
     info!("Starting client...");
-
-    info!("{:?}", var("TESTCASE").ok());
 
     // Check test case
     let options = match var("TESTCASE").ok().as_deref() {
@@ -139,6 +142,22 @@ async fn main() {
 
         info!("Connecting to {}", url);
 
+        if i == 0 && options.first_separate {
+            // Create connection
+            let connection = client
+                .connect(remote, host_str)
+                .expect("failed to create connection");
+
+            connect(
+                options.clone(),
+                downloads.clone(),
+                vec![url.clone()],
+                connection,
+            )
+            .await
+            .expect("failed to connect to the server");
+        }
+
         // Create connection
         let connection = client
             .connect(remote, host_str)
@@ -147,7 +166,7 @@ async fn main() {
         let handle = connect(
             options.clone(),
             downloads.clone(),
-            Vec::from(urls),
+            Vec::from(&urls[1..]),
             connection,
         );
 
