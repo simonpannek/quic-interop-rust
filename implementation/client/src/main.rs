@@ -2,6 +2,7 @@ use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
 use anyhow::{Context, Result};
 use bytes::{Buf, Bytes};
+use derive_builder::Builder;
 use futures::future::{self, join_all};
 use h3::{
     client::{Connection, SendRequest},
@@ -19,6 +20,10 @@ use url::Url;
 
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
+
+#[derive(Builder)]
+struct Options {
+}
 
 struct Verifier;
 
@@ -61,6 +66,27 @@ async fn main() {
     }
 
     info!("Starting client...");
+
+    // Check test case
+    let _options = match var("TESTCASE").ok().as_deref() {
+        Some("handshake") => OptionsBuilder::default().build(),
+        Some("transfer") => OptionsBuilder::default().build(),
+        Some("multihandshake") => OptionsBuilder::default().build(),
+        Some("versionnegotiations") => OptionsBuilder::default().build(),
+        Some("chacha20") => OptionsBuilder::default().build(),
+        Some("retry") => OptionsBuilder::default().build(),
+        Some("resumption") => OptionsBuilder::default().build(),
+        Some("zerortt") => OptionsBuilder::default().build(),
+        Some("transportparameter") => OptionsBuilder::default().build(),
+        Some(unknown) => {
+            error!("unknown test case: {}", unknown);
+            process::exit(127);
+        }
+        None => {
+            error!("no test case set");
+            process::exit(127);
+        }
+    };
 
     // Check test case
     match var("TESTCASE").ok().as_deref() {

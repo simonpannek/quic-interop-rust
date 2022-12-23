@@ -2,6 +2,7 @@ use std::{env::var, fs, path::Path, process, sync::Arc};
 
 use anyhow::{bail, Context, Error, Result};
 use bytes::{Bytes, BytesMut};
+use derive_builder::Builder;
 use futures::StreamExt;
 use h3::{quic, server::RequestStream};
 use http::{Method, Request, StatusCode};
@@ -19,6 +20,11 @@ use tokio::{fs::File, io::AsyncReadExt};
 const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
+
+#[derive(Builder)]
+struct Options {
+    retry: bool,
+}
 
 #[tokio::main]
 async fn main() {
@@ -41,8 +47,16 @@ async fn main() {
     info!("Starting server...");
 
     // Check test case
-    match var("TESTCASE").ok().as_deref() {
-        Some("handshake") => {}
+    let options = match var("TESTCASE").ok().as_deref() {
+        Some("handshake") => OptionsBuilder::default().build(),
+        Some("transfer") => OptionsBuilder::default().build(),
+        Some("multihandshake") => OptionsBuilder::default().build(),
+        Some("versionnegotiations") => OptionsBuilder::default().build(),
+        Some("chacha20") => OptionsBuilder::default().build(),
+        Some("retry") => OptionsBuilder::default().retry(true).build(),
+        Some("resumption") => OptionsBuilder::default().build(),
+        Some("zerortt") => OptionsBuilder::default().build(),
+        Some("transportparameter") => OptionsBuilder::default().build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
             process::exit(127);
@@ -51,7 +65,7 @@ async fn main() {
             error!("no test case set");
             process::exit(127);
         }
-    }
+    }.expect("failed to build options");
 
     // Get paths if set
     let _qlogdir = var("QLOGDIR").ok();
@@ -60,7 +74,7 @@ async fn main() {
         .map(|path| Arc::from(Path::new(path)))
         .expect("www directory needs to be set");
 
-    let config = create_config().expect("failed to create config");
+    let config = create_config(&options).expect("failed to create config");
 
     let (server, mut incoming) = Endpoint::server(
         config,
@@ -94,7 +108,7 @@ async fn main() {
     server.wait_idle().await;
 }
 
-fn create_config() -> Result<ServerConfig> {
+fn create_config(options: &Options) -> Result<ServerConfig> {
     // Get certificate file location
     let certs = var("CERTS").unwrap_or_default();
 
@@ -136,7 +150,8 @@ fn create_config() -> Result<ServerConfig> {
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     // Create server config
-    let config = ServerConfig::with_crypto(Arc::new(crypto_config));
+    let mut config = ServerConfig::with_crypto(Arc::new(crypto_config));
+    config.use_retry(options.retry);
 
     Ok(config)
 }
@@ -192,7 +207,10 @@ where
 
             let mut file = File::open(path).await.context("failed to open file")?;
 
-            let response = http::Response::builder().status(StatusCode::OK).body(()).unwrap();
+            let response = http::Response::builder()
+                .status(StatusCode::OK)
+                .body(())
+                .unwrap();
 
             stream.send_response(response).await?;
 
