@@ -1,6 +1,6 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use bytes::{Buf, Bytes};
 use derive_builder::Builder;
 use futures::future::{self, join_all};
@@ -21,8 +21,12 @@ use url::Url;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
-#[derive(Builder)]
+#[derive(Builder, Clone, Default)]
+#[builder(default)]
 struct Options {
+    single_connection: bool,
+    chacha_only: bool,
+    zero_rtt: bool,
 }
 
 struct Verifier;
@@ -67,30 +71,19 @@ async fn main() {
 
     info!("Starting client...");
 
-    // Check test case
-    let _options = match var("TESTCASE").ok().as_deref() {
-        Some("handshake") => OptionsBuilder::default().build(),
-        Some("transfer") => OptionsBuilder::default().build(),
-        Some("multihandshake") => OptionsBuilder::default().build(),
-        Some("versionnegotiations") => OptionsBuilder::default().build(),
-        Some("chacha20") => OptionsBuilder::default().build(),
-        Some("retry") => OptionsBuilder::default().build(),
-        Some("resumption") => OptionsBuilder::default().build(),
-        Some("zerortt") => OptionsBuilder::default().build(),
-        Some("transportparameter") => OptionsBuilder::default().build(),
-        Some(unknown) => {
-            error!("unknown test case: {}", unknown);
-            process::exit(127);
-        }
-        None => {
-            error!("no test case set");
-            process::exit(127);
-        }
-    };
+    info!("{:?}", var("TESTCASE").ok());
 
     // Check test case
-    match var("TESTCASE").ok().as_deref() {
-        Some("handshake") => {}
+    let options = match var("TESTCASE").ok().as_deref() {
+        Some("handshake") => OptionsBuilder::default().build(),
+        Some("transfer") => OptionsBuilder::default().single_connection(true).build(),
+        Some("multihandshake") => OptionsBuilder::default().build(),
+        Some("versionnegotiation") => OptionsBuilder::default().build(),
+        Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
+        Some("retry") => OptionsBuilder::default().build(),
+        Some("resumption") => OptionsBuilder::default().build(),
+        Some("zerortt") => OptionsBuilder::default().zero_rtt(true).build(),
+        Some("transportparameter") => OptionsBuilder::default().single_connection(true).build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
             process::exit(127);
@@ -100,6 +93,7 @@ async fn main() {
             process::exit(127);
         }
     }
+    .expect("failed to build options");
 
     // Get paths if set
     let _qlogdir = var("QLOGDIR").ok();
@@ -108,7 +102,7 @@ async fn main() {
         .map(|path| Arc::from(Path::new(path)))
         .expect("downloads directory needs to be set");
 
-    let config = create_config().expect("failed to create config");
+    let config = create_config(&options).expect("failed to create config");
 
     let mut client =
         Endpoint::client("[::]:0".parse().unwrap()).expect("failed to create connection endpoint");
@@ -117,14 +111,25 @@ async fn main() {
 
     // Load request addresses
     let requests = var("REQUESTS").unwrap_or_default();
-    let requests = requests
+    let requests: Vec<_> = requests
         .split_whitespace()
-        .filter_map(|url| Url::parse(url).ok());
+        .filter_map(|url| Url::parse(url).ok())
+        .collect();
 
     let mut handles = Vec::new();
 
-    for url in requests {
+    let slice_size = if options.single_connection {
+        requests.len()
+    } else {
+        1
+    };
+
+    for i in 0..requests.len() / slice_size {
+        let i = i * slice_size;
+        let urls = &requests[i..i + slice_size];
+
         // Get connection address
+        let url = urls.get(0).unwrap();
         let host_str = url.host_str().expect("host string not set");
         let remote = (host_str, url.port().unwrap_or(4433))
             .to_socket_addrs()
@@ -139,7 +144,12 @@ async fn main() {
             .connect(remote, host_str)
             .expect("failed to create connection");
 
-        let handle = connect(downloads.clone(), url, connection);
+        let handle = connect(
+            options.clone(),
+            downloads.clone(),
+            Vec::from(urls),
+            connection,
+        );
 
         // Connect to the server
         handles.push(tokio::spawn(async move {
@@ -154,7 +164,7 @@ async fn main() {
     client.wait_idle().await;
 }
 
-fn create_config() -> Result<ClientConfig> {
+fn create_config(options: &Options) -> Result<ClientConfig> {
     // Create root certificate
     let mut roots = rustls::RootCertStore::empty();
 
@@ -165,8 +175,15 @@ fn create_config() -> Result<ClientConfig> {
     }
 
     // Create crypto config
-    let mut crypto_config = rustls::ClientConfig::builder()
-        .with_safe_default_cipher_suites()
+    let crypto_config = rustls::ClientConfig::builder();
+
+    let crypto_config = if options.chacha_only {
+        crypto_config.with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
+    } else {
+        crypto_config.with_safe_default_cipher_suites()
+    };
+
+    let mut crypto_config = crypto_config
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .context("failed to set protocol version")?
@@ -185,12 +202,27 @@ fn create_config() -> Result<ClientConfig> {
     Ok(config)
 }
 
-async fn connect(downloads: Arc<Path>, url: Url, connection: Connecting) -> Result<()> {
-    let connection = connection.await?;
+async fn connect(
+    options: Options,
+    downloads: Arc<Path>,
+    urls: Vec<Url>,
+    connection: Connecting,
+) -> Result<()> {
+    let connection = if options.zero_rtt {
+        if let Ok((connection, accepted)) = connection.into_0rtt() {
+            assert!(accepted.await);
+
+            connection
+        } else {
+            bail!("couldn't find a key in the file")
+        }
+    } else {
+        connection.await?
+    };
 
     let (driver, send) = h3::client::new(h3_quinn::Connection::new(connection)).await?;
 
-    let handle = handle_request(downloads, url, send);
+    let handle = handle_request(downloads, urls, send);
     let drive = drive_request(driver);
 
     let (handle_res, drive_res) = tokio::join!(handle, drive);
@@ -210,34 +242,36 @@ where
 
 async fn handle_request<T>(
     downloads: Arc<Path>,
-    url: Url,
+    urls: Vec<Url>,
     mut send: SendRequest<T, Bytes>,
 ) -> Result<()>
 where
     T: quic::OpenStreams<Bytes>,
 {
-    debug!("Sending a request to {}", url);
+    for url in urls {
+        debug!("Sending a request to {}", url);
 
-    let req = http::Request::builder().uri(url.as_str()).body(())?;
+        let req = http::Request::builder().uri(url.as_str()).body(())?;
 
-    let mut stream = send.send_request(req).await?;
+        let mut stream = send.send_request(req).await?;
 
-    // finish on the sending side
-    stream.finish().await?;
+        // finish on the sending side
+        stream.finish().await?;
 
-    debug!("Receiving a response...");
+        debug!("Receiving a response...");
 
-    let resp = stream.recv_response().await?;
+        let resp = stream.recv_response().await?;
 
-    debug!("Response: {:?} {}", resp.version(), resp.status());
+        debug!("Response: {:?} {}", resp.version(), resp.status());
 
-    let file_name = Path::new(url.path()).file_name().unwrap_or_default();
-    let path = downloads.to_path_buf().join(file_name);
+        let file_name = Path::new(url.path()).file_name().unwrap_or_default();
+        let path = downloads.to_path_buf().join(file_name);
 
-    let mut file = File::create(path).await?;
+        let mut file = File::create(path).await?;
 
-    while let Some(buf) = stream.recv_data().await? {
-        file.write_all(buf.chunk()).await?;
+        while let Some(buf) = stream.recv_data().await? {
+            file.write_all(buf.chunk()).await?;
+        }
     }
 
     Ok(())

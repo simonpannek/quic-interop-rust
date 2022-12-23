@@ -12,7 +12,7 @@ use log4rs::{
     config::{Appender, Root},
     Config,
 };
-use quinn::{Connecting, Endpoint, ServerConfig};
+use quinn::{Connecting, Endpoint, ServerConfig, TransportConfig};
 use rustls_pemfile::Item::{ECKey, PKCS8Key, RSAKey};
 use tokio::{fs::File, io::AsyncReadExt};
 
@@ -21,9 +21,13 @@ const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 
-#[derive(Builder)]
+#[derive(Builder, Default)]
+#[builder(default)]
 struct Options {
     retry: bool,
+    chacha_only: bool,
+    #[builder(setter(strip_option))]
+    max_streams: Option<u32>,
 }
 
 #[tokio::main]
@@ -51,12 +55,12 @@ async fn main() {
         Some("handshake") => OptionsBuilder::default().build(),
         Some("transfer") => OptionsBuilder::default().build(),
         Some("multihandshake") => OptionsBuilder::default().build(),
-        Some("versionnegotiations") => OptionsBuilder::default().build(),
-        Some("chacha20") => OptionsBuilder::default().build(),
+        Some("versionnegotiation") => OptionsBuilder::default().build(),
+        Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
         Some("retry") => OptionsBuilder::default().retry(true).build(),
         Some("resumption") => OptionsBuilder::default().build(),
         Some("zerortt") => OptionsBuilder::default().build(),
-        Some("transportparameter") => OptionsBuilder::default().build(),
+        Some("transportparameter") => OptionsBuilder::default().max_streams(10).build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
             process::exit(127);
@@ -134,8 +138,15 @@ fn create_config(options: &Options) -> Result<ServerConfig> {
         .collect();
 
     // Create crypto config
-    let mut crypto_config = rustls::ServerConfig::builder()
-        .with_safe_default_cipher_suites()
+    let crypto_config = rustls::ServerConfig::builder();
+
+    let crypto_config = if options.chacha_only {
+        crypto_config.with_cipher_suites(&[rustls::cipher_suite::TLS13_CHACHA20_POLY1305_SHA256])
+    } else {
+        crypto_config.with_safe_default_cipher_suites()
+    };
+
+    let mut crypto_config = crypto_config
         .with_safe_default_kx_groups()
         .with_protocol_versions(&[&rustls::version::TLS13])
         .context("failed to set protocol version")?
@@ -149,8 +160,16 @@ fn create_config(options: &Options) -> Result<ServerConfig> {
     // Set key log file
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
+    // Create transport config
+    let mut transport_config = TransportConfig::default();
+
+    if let Some(max_streams) = options.max_streams {
+        transport_config.max_concurrent_bidi_streams(max_streams.into());
+    }
+
     // Create server config
     let mut config = ServerConfig::with_crypto(Arc::new(crypto_config));
+    config.transport = Arc::new(transport_config);
     config.use_retry(options.retry);
 
     Ok(config)
