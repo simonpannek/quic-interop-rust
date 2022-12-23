@@ -29,7 +29,7 @@ run_test:
       artifacts: true
   script:
     - unzip artifact.zip -d /tmp
-    - (cd /quic-interop-runner && python3 run.py -t handshake,transfer,multihandshake,versionnegotiation,chacha20,resumption,retry,zerortt,transportparameter )
+    - (cd /quic-interop-runner && python3 run.py -d -t handshake,transfer,multihandshake,versionnegotiation,chacha20,resumption,retry,zerortt,transportparameter )
   after_script:
     - mv /quic-interop-runner/logs* $CI_PROJECT_DIR
   artifacts:
