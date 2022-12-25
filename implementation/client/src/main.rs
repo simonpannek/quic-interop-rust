@@ -26,6 +26,9 @@ const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 struct Options {
     // Whether to download all files using a single connection
     single_connection: bool,
+    // Set the version number of QUIC
+    #[builder(setter(strip_option))]
+    version: Option<u32>,
     // Whether to use TLS_CHACHA20_POLY1305_SHA256 only as a cipher suite
     chacha_only: bool,
     // Whether to download the first file using a separate connection
@@ -81,7 +84,7 @@ async fn main() {
         Some("handshake") => OptionsBuilder::default().build(),
         Some("transfer") => OptionsBuilder::default().single_connection(true).build(),
         Some("multihandshake") => OptionsBuilder::default().build(),
-        Some("versionnegotiation") => OptionsBuilder::default().build(),
+        Some("versionnegotiation") => OptionsBuilder::default().version(168430090).build(),
         Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
         Some("retry") => OptionsBuilder::default().build(),
         Some("resumption") => OptionsBuilder::default().build(),
@@ -218,7 +221,11 @@ fn create_config(options: &Options) -> Result<ClientConfig> {
     crypto_config.key_log = Arc::new(rustls::KeyLogFile::new());
 
     // Create client config
-    let config = ClientConfig::new(Arc::new(crypto_config));
+    let mut config = ClientConfig::new(Arc::new(crypto_config));
+
+    if let Some(version) = options.version {
+        config.version(version);
+    }
 
     Ok(config)
 }
