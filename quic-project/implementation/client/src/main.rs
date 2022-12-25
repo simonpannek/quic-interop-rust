@@ -87,8 +87,8 @@ async fn main() {
         Some("versionnegotiation") => OptionsBuilder::default().version(168430090).build(),
         Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
         Some("retry") => OptionsBuilder::default().build(),
-        Some("resumption") => OptionsBuilder::default().build(),
-        Some("zerortt") => OptionsBuilder::default().zero_rtt(true).build(),
+        Some("resumption") => OptionsBuilder::default().first_separate(true).build(),
+        Some("zerortt") => OptionsBuilder::default().first_separate(true).zero_rtt(true).build(),
         Some("transportparameter") => OptionsBuilder::default().single_connection(true).build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
