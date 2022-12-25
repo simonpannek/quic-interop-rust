@@ -1,6 +1,6 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use bytes::{Buf, Bytes};
 use derive_builder::Builder;
 use futures::future::{self, join_all};
@@ -87,8 +87,15 @@ async fn main() {
         Some("versionnegotiation") => OptionsBuilder::default().version(168430090).build(),
         Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
         Some("retry") => OptionsBuilder::default().build(),
-        Some("resumption") => OptionsBuilder::default().first_separate(true).build(),
-        Some("zerortt") => OptionsBuilder::default().first_separate(true).zero_rtt(true).build(),
+        Some("resumption") => OptionsBuilder::default()
+            .single_connection(true)
+            .first_separate(true)
+            .build(),
+        Some("zerortt") => OptionsBuilder::default()
+            .single_connection(true)
+            .first_separate(true)
+            .zero_rtt(true)
+            .build(),
         Some("transportparameter") => OptionsBuilder::default().single_connection(true).build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
@@ -237,7 +244,10 @@ async fn connect(
     connection: Connecting,
 ) -> Result<()> {
     let connection = if options.zero_rtt {
-        connection.into_0rtt().map(|x| x.0).map_err(|why| anyhow!("failed to connection using 0-RTT: {:?}", why))?
+        connection
+            .into_0rtt()
+            .map(|x| x.0)
+            .map_err(|why| anyhow!("failed to connection using 0-RTT: {:?}", why))?
     } else {
         connection.await?
     };
