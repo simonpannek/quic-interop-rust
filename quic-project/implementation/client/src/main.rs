@@ -159,7 +159,7 @@ async fn main() {
                 .expect("failed to create connection");
 
             connect(
-                options.clone(),
+                options.zero_rtt,
                 downloads.clone(),
                 vec![url.clone()],
                 connection,
@@ -175,12 +175,7 @@ async fn main() {
             .connect(remote, host_str)
             .expect("failed to create connection");
 
-        let handle = connect(
-            options.clone(),
-            downloads.clone(),
-            Vec::from(urls),
-            connection,
-        );
+        let handle = connect(false, downloads.clone(), Vec::from(urls), connection);
 
         // Connect to the server
         handles.push(tokio::spawn(async move {
@@ -238,16 +233,16 @@ fn create_config(options: &Options) -> Result<ClientConfig> {
 }
 
 async fn connect(
-    options: Options,
+    zero_rtt: bool,
     downloads: Arc<Path>,
     urls: Vec<Url>,
     connection: Connecting,
 ) -> Result<()> {
-    let connection = if options.zero_rtt {
+    let connection = if zero_rtt {
         connection
             .into_0rtt()
             .map(|x| x.0)
-            .map_err(|why| anyhow!("failed to connection using 0-RTT: {:?}", why))?
+            .map_err(|why| anyhow!("failed to connect using 0-RTT: {:?}", why))?
     } else {
         connection.await?
     };
