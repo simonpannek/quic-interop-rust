@@ -159,7 +159,7 @@ async fn main() {
                 .expect("failed to create connection");
 
             connect(
-                options.zero_rtt,
+                false,
                 downloads.clone(),
                 vec![url.clone()],
                 connection,
@@ -175,7 +175,7 @@ async fn main() {
             .connect(remote, host_str)
             .expect("failed to create connection");
 
-        let handle = connect(false, downloads.clone(), Vec::from(urls), connection);
+        let handle = connect(options.zero_rtt, downloads.clone(), Vec::from(urls), connection);
 
         // Connect to the server
         handles.push(tokio::spawn(async move {
