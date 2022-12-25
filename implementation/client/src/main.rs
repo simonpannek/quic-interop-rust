@@ -1,6 +1,6 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use bytes::{Buf, Bytes};
 use derive_builder::Builder;
 use futures::future::{self, join_all};
@@ -84,11 +84,19 @@ async fn main() {
         Some("handshake") => OptionsBuilder::default().build(),
         Some("transfer") => OptionsBuilder::default().single_connection(true).build(),
         Some("multihandshake") => OptionsBuilder::default().build(),
-        Some("versionnegotiation") => OptionsBuilder::default().version(168430090).build(),
+        Some("versionnegotiation") => OptionsBuilder::default().version(169486906).build(),
+
         Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
         Some("retry") => OptionsBuilder::default().build(),
-        Some("resumption") => OptionsBuilder::default().build(),
-        Some("zerortt") => OptionsBuilder::default().zero_rtt(true).build(),
+        Some("resumption") => OptionsBuilder::default()
+            .single_connection(true)
+            .first_separate(true)
+            .build(),
+        Some("zerortt") => OptionsBuilder::default()
+            .single_connection(true)
+            .first_separate(true)
+            .zero_rtt(true)
+            .build(),
         Some("transportparameter") => OptionsBuilder::default().single_connection(true).build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
@@ -151,36 +159,32 @@ async fn main() {
                 .connect(remote, host_str)
                 .expect("failed to create connection");
 
-            connect(
-                options.clone(),
-                downloads.clone(),
-                vec![url.clone()],
-                connection,
-            )
-            .await
-            .expect("failed to connect to the server");
+            connect(false, downloads.clone(), vec![url.clone()], connection)
+                .await
+                .expect("failed to connect to the server");
 
             urls = &urls[1..];
         }
 
         // Create connection
-        let connection = client
-            .connect(remote, host_str)
-            .expect("failed to create connection");
+        match client.connect(remote, host_str) {
+            Ok(connection) => {
+                let handle = connect(
+                    options.zero_rtt,
+                    downloads.clone(),
+                    Vec::from(urls),
+                    connection,
+                );
 
-        let handle = connect(
-            options.clone(),
-            downloads.clone(),
-            Vec::from(urls),
-            connection,
-        );
-
-        // Connect to the server
-        handles.push(tokio::spawn(async move {
-            if let Err(why) = handle.await {
-                error!("failed to connect to the server: {}", why);
+                // Connect to the server
+                handles.push(tokio::spawn(async move {
+                    if let Err(why) = handle.await {
+                        error!("failed to connect to the server: {}", why);
+                    }
+                }));
             }
-        }));
+            Err(why) => error!("failed to create connection: {}", why),
+        }
     }
 
     join_all(handles).await;
@@ -231,19 +235,16 @@ fn create_config(options: &Options) -> Result<ClientConfig> {
 }
 
 async fn connect(
-    options: Options,
+    zero_rtt: bool,
     downloads: Arc<Path>,
     urls: Vec<Url>,
     connection: Connecting,
 ) -> Result<()> {
-    let connection = if options.zero_rtt {
-        if let Ok((connection, accepted)) = connection.into_0rtt() {
-            assert!(accepted.await);
-
-            connection
-        } else {
-            bail!("couldn't find a key in the file")
-        }
+    let connection = if zero_rtt {
+        connection
+            .into_0rtt()
+            .map(|x| x.0)
+            .map_err(|why| anyhow!("failed to connect using 0-RTT: {:?}", why))?
     } else {
         connection.await?
     };

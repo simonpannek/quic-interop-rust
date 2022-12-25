@@ -19,7 +19,7 @@ use tokio::{fs::File, io::AsyncReadExt};
 // Send buffer size
 const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
-const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
+const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h2"];
 
 #[derive(Builder, Default)]
 #[builder(default)]
