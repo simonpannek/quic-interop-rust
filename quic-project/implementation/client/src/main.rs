@@ -1,6 +1,6 @@
 use std::{env::var, net::ToSocketAddrs, path::Path, process, sync::Arc};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, anyhow};
 use bytes::{Buf, Bytes};
 use derive_builder::Builder;
 use futures::future::{self, join_all};
@@ -237,13 +237,7 @@ async fn connect(
     connection: Connecting,
 ) -> Result<()> {
     let connection = if options.zero_rtt {
-        if let Ok((connection, accepted)) = connection.into_0rtt() {
-            assert!(accepted.await);
-
-            connection
-        } else {
-            bail!("couldn't find a key in the file")
-        }
+        connection.into_0rtt().map(|x| x.0).map_err(|why| anyhow!("failed to connection using 0-RTT: {:?}", why))?
     } else {
         connection.await?
     };
