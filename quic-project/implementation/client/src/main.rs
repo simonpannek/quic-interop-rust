@@ -158,31 +158,32 @@ async fn main() {
                 .connect(remote, host_str)
                 .expect("failed to create connection");
 
-            connect(
-                false,
-                downloads.clone(),
-                vec![url.clone()],
-                connection,
-            )
-            .await
-            .expect("failed to connect to the server");
+            connect(false, downloads.clone(), vec![url.clone()], connection)
+                .await
+                .expect("failed to connect to the server");
 
             urls = &urls[1..];
         }
 
         // Create connection
-        let connection = client
-            .connect(remote, host_str)
-            .expect("failed to create connection");
+        match client.connect(remote, host_str) {
+            Ok(connection) => {
+                let handle = connect(
+                    options.zero_rtt,
+                    downloads.clone(),
+                    Vec::from(urls),
+                    connection,
+                );
 
-        let handle = connect(options.zero_rtt, downloads.clone(), Vec::from(urls), connection);
-
-        // Connect to the server
-        handles.push(tokio::spawn(async move {
-            if let Err(why) = handle.await {
-                error!("failed to connect to the server: {}", why);
+                // Connect to the server
+                handles.push(tokio::spawn(async move {
+                    if let Err(why) = handle.await {
+                        error!("failed to connect to the server: {}", why);
+                    }
+                }));
             }
-        }));
+            Err(why) => error!("failed to create connection: {}", why),
+        }
     }
 
     join_all(handles).await;
