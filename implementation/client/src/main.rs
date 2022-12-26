@@ -84,8 +84,7 @@ async fn main() {
         Some("handshake") => OptionsBuilder::default().build(),
         Some("transfer") => OptionsBuilder::default().single_connection(true).build(),
         Some("multihandshake") => OptionsBuilder::default().build(),
-        Some("versionnegotiation") => OptionsBuilder::default().version(169486906).build(),
-
+        Some("versionnegotiation") => OptionsBuilder::default().version(0xff00001d).build(),
         Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
         Some("retry") => OptionsBuilder::default().build(),
         Some("resumption") => OptionsBuilder::default()

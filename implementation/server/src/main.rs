@@ -21,9 +21,7 @@ const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 // Supported versions for version negotiation
-const RESTRICTED_SUPPORTED_VERSIONS: &[u32] = &[
-    0x00000001,
-];
+const RESTRICTED_SUPPORTED_VERSIONS: &[u32] = &[0x00000001];
 
 #[derive(Builder, Default)]
 #[builder(default)]
