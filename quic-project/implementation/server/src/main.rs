@@ -12,14 +12,18 @@ use log4rs::{
     config::{Appender, Root},
     Config,
 };
-use quinn::{Connecting, Endpoint, ServerConfig, TransportConfig};
+use quinn::{Connecting, Endpoint, EndpointConfig, ServerConfig, TransportConfig};
 use rustls_pemfile::Item::{ECKey, PKCS8Key, RSAKey};
 use tokio::{fs::File, io::AsyncReadExt};
 
 // Send buffer size
 const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
-const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h2"];
+const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
+// Supported versions for version negotiation
+const DEFAULT_SUPPORTED_VERSIONS: &[u32] = &[
+    0x00000001,
+];
 
 #[derive(Builder, Default)]
 #[builder(default)]
@@ -72,7 +76,8 @@ async fn main() {
             error!("no test case set");
             process::exit(127);
         }
-    }.expect("failed to build options");
+    }
+    .expect("failed to build options");
 
     // Get paths if set
     let _qlogdir = var("QLOGDIR").ok();
@@ -83,17 +88,23 @@ async fn main() {
 
     let config = create_config(&options).expect("failed to create config");
 
-    let (server, mut incoming) = Endpoint::server(
-        config,
-        format!(
+    let (server, mut incoming) = {
+        let addr: std::net::SocketAddr = format!(
             "{}:{}",
             var("IP").unwrap_or("[::1]".to_string()),
             var("PORT").unwrap_or("4433".to_string())
         )
         .parse()
-        .expect("failed to parse address"),
-    )
-    .expect("failed to create connection endpoint");
+        .expect("failed to parse address");
+
+        let mut endpoint_config = EndpointConfig::default();
+
+        endpoint_config.supported_versions(DEFAULT_SUPPORTED_VERSIONS.to_vec());
+
+        let socket = std::net::UdpSocket::bind(addr).expect("failed to open udp socket");
+        Endpoint::new(endpoint_config, Some(config), socket)
+            .expect("failed to create connection endpoint")
+    };
 
     info!(
         "Starting to listen on {}.",
