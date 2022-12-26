@@ -21,13 +21,15 @@ const SEND_SIZE: usize = 40960;
 // Set ALPN protocols
 const ALPN_QUIC_HTTP: &[&[u8]] = &[b"h3"];
 // Supported versions for version negotiation
-const DEFAULT_SUPPORTED_VERSIONS: &[u32] = &[
+const RESTRICTED_SUPPORTED_VERSIONS: &[u32] = &[
     0x00000001,
 ];
 
 #[derive(Builder, Default)]
 #[builder(default)]
 struct Options {
+    // Whether to restrict the supported versions
+    restrict_versions: bool,
     // Whether to generate a Retry
     retry: bool,
     // Whether to use TLS_CHACHA20_POLY1305_SHA256 only as a cipher suite
@@ -62,7 +64,7 @@ async fn main() {
         Some("handshake") => OptionsBuilder::default().build(),
         Some("transfer") => OptionsBuilder::default().build(),
         Some("multihandshake") => OptionsBuilder::default().build(),
-        Some("versionnegotiation") => OptionsBuilder::default().build(),
+        Some("versionnegotiation") => OptionsBuilder::default().restrict_versions(true).build(),
         Some("chacha20") => OptionsBuilder::default().chacha_only(true).build(),
         Some("retry") => OptionsBuilder::default().retry(true).build(),
         Some("resumption") => OptionsBuilder::default().build(),
@@ -99,7 +101,9 @@ async fn main() {
 
         let mut endpoint_config = EndpointConfig::default();
 
-        endpoint_config.supported_versions(DEFAULT_SUPPORTED_VERSIONS.to_vec());
+        if options.restrict_versions {
+            endpoint_config.supported_versions(RESTRICTED_SUPPORTED_VERSIONS.to_vec());
+        }
 
         let socket = std::net::UdpSocket::bind(addr).expect("failed to open udp socket");
         Endpoint::new(endpoint_config, Some(config), socket)
