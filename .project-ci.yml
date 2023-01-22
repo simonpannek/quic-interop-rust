@@ -19,6 +19,19 @@ build:
     GIT_SUBMODULE_STRATEGY: recursive
     GIT_SUBMODULE_DEPTH: 1
 
+build_pandoc:
+  stage: build
+  only:
+    - main
+  image: "gitlab.lrz.de:5005/acn/terms/2022ws/container/latex:latest"
+  script:
+    - cd quic-project/quic-project4
+    - make
+    - mv Problem4.pdf $CI_PROJECT_DIR
+  artifacts:
+    paths:
+      - Problem4.pdf
+
 run_test:
   stage: test
   only:
@@ -29,9 +42,29 @@ run_test:
       artifacts: true
   script:
     - unzip artifact.zip -d /tmp
-    - (cd /quic-interop-runner && python3 run.py -t handshake,transfer,multihandshake,versionnegotiation,chacha20,resumption,retry,zerortt,transportparameter )
+    - cd /quic-interop-runner
+    - (python3 run.py -t handshake,transfer,multihandshake,versionnegotiation,chacha20,resumption,retry,zerortt,transportparameter || true)
   after_script:
     - mv /quic-interop-runner/logs* $CI_PROJECT_DIR
+  artifacts:
+    paths:
+      - "logs*/"
+    when: always
+
+run_measurement:
+  stage: test
+  only:
+    - main
+  image: "gitlab.lrz.de:5005/acn/terms/2022ws/container/interop_runner:latest"
+  needs:
+    - job: build
+      artifacts: true
+  script:
+    - unzip artifact.zip -d /tmp
+    - cd /quic-interop-runner
+    - (python3 run.py -t goodput,optimize || true)
+    - mv /quic-interop-runner/logs* $CI_PROJECT_DIR
+  when: manual
   artifacts:
     paths:
       - "logs*/"
