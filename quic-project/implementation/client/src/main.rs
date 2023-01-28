@@ -35,6 +35,9 @@ struct Options {
     first_separate: bool,
     // Whether to use 0-RTT after reconnecting to a server
     zero_rtt: bool,
+    // The log level of the application (defaults to info)
+    #[builder(setter(strip_option))]
+    log_level: Option<LevelFilter>,
 }
 
 struct Verifier;
@@ -61,24 +64,6 @@ impl rustls::client::ServerCertVerifier for Verifier {
 
 #[tokio::main]
 async fn main() {
-    // Setup log file if set
-    if let Some(logs) = var("LOGS").ok() {
-        // Set log file
-        let log_file = FileAppender::builder()
-            .build(format!("{}/client.log", logs))
-            .expect("failed to set log file");
-
-        // Create logger config
-        let config = Config::builder()
-            .appender(Appender::builder().build("logfile", Box::new(log_file)))
-            .build(Root::builder().appender("logfile").build(LevelFilter::Info))
-            .expect("failed to create logger config");
-
-        log4rs::init_config(config).expect("failed to create logger");
-    }
-
-    info!("Starting client...");
-
     // Check test case
     let options = match var("TESTCASE").ok().as_deref() {
         Some("handshake") => OptionsBuilder::default().build(),
@@ -97,6 +82,12 @@ async fn main() {
             .zero_rtt(true)
             .build(),
         Some("transportparameter") => OptionsBuilder::default().single_connection(true).build(),
+        Some("goodput") => OptionsBuilder::default()
+            .log_level(LevelFilter::Off)
+            .build(),
+        Some("optimize") => OptionsBuilder::default()
+            .log_level(LevelFilter::Off)
+            .build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
             process::exit(127);
@@ -107,6 +98,28 @@ async fn main() {
         }
     }
     .expect("failed to build options");
+
+    // Setup log file if set
+    if let Some(logs) = var("LOGS").ok() {
+        // Set log file
+        let log_file = FileAppender::builder()
+            .build(format!("{}/client.log", logs))
+            .expect("failed to set log file");
+
+        // Create logger config
+        let config = Config::builder()
+            .appender(Appender::builder().build("logfile", Box::new(log_file)))
+            .build(
+                Root::builder()
+                    .appender("logfile")
+                    .build(options.log_level.unwrap_or(LevelFilter::Info)),
+            )
+            .expect("failed to create logger config");
+
+        log4rs::init_config(config).expect("failed to create logger");
+    }
+
+    info!("Starting client...");
 
     // Get paths if set
     let _qlogdir = var("QLOGDIR").ok();

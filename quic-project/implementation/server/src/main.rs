@@ -35,28 +35,13 @@ struct Options {
     // The number of maximum streams bidi streams, open at the same time
     #[builder(setter(strip_option))]
     max_streams: Option<u32>,
+    // The log level of the application (defaults to info)
+    #[builder(setter(strip_option))]
+    log_level: Option<LevelFilter>,
 }
 
 #[tokio::main]
 async fn main() {
-    // Setup log file if set
-    if let Some(logs) = var("LOGS").ok() {
-        // Set log file
-        let log_file = FileAppender::builder()
-            .build(format!("{}/server.log", logs))
-            .expect("failed to set log file");
-
-        // Create logger config
-        let config = Config::builder()
-            .appender(Appender::builder().build("logfile", Box::new(log_file)))
-            .build(Root::builder().appender("logfile").build(LevelFilter::Info))
-            .expect("failed to create logger config");
-
-        log4rs::init_config(config).expect("failed to create logger");
-    }
-
-    info!("Starting server...");
-
     // Check test case
     let options = match var("TESTCASE").ok().as_deref() {
         Some("handshake") => OptionsBuilder::default().build(),
@@ -68,6 +53,12 @@ async fn main() {
         Some("resumption") => OptionsBuilder::default().build(),
         Some("zerortt") => OptionsBuilder::default().build(),
         Some("transportparameter") => OptionsBuilder::default().max_streams(10).build(),
+        Some("goodput") => OptionsBuilder::default()
+            .log_level(LevelFilter::Off)
+            .build(),
+        Some("optimize") => OptionsBuilder::default()
+            .log_level(LevelFilter::Off)
+            .build(),
         Some(unknown) => {
             error!("unknown test case: {}", unknown);
             process::exit(127);
@@ -78,6 +69,28 @@ async fn main() {
         }
     }
     .expect("failed to build options");
+
+    // Setup log file if set
+    if let Some(logs) = var("LOGS").ok() {
+        // Set log file
+        let log_file = FileAppender::builder()
+            .build(format!("{}/server.log", logs))
+            .expect("failed to set log file");
+
+        // Create logger config
+        let config = Config::builder()
+            .appender(Appender::builder().build("logfile", Box::new(log_file)))
+            .build(
+                Root::builder()
+                    .appender("logfile")
+                    .build(options.log_level.unwrap_or(LevelFilter::Info)),
+            )
+            .expect("failed to create logger config");
+
+        log4rs::init_config(config).expect("failed to create logger");
+    }
+
+    info!("Starting server...");
 
     // Get paths if set
     let _qlogdir = var("QLOGDIR").ok();
