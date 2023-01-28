@@ -9,15 +9,21 @@ Explain what you tried to optimize and evaluate its effects.
 a) Goodput test
 
 In the following figure, we can see the goodput over time printed using matplotlib:
-![Goodput](figures/goodput.png)
+
+![Goodput](figures/goodput.png){ width=50% }
 
 
 b) Optimization
 
-For optimization, I saw some improvement when setting the initial_max_streams_bidi transport parameter to a higher value (in our case 255), similar to how we have done in testcase "transportparameter":
-![Optimization](figures/pre_optimize.png)
-![Optimization](figures/optimize.png)
+Here, we can see the goodput over time prior to optimization:
 
+![Pre Optimization](figures/pre_optimize.png){ width=50% }
+
+For optimization, I saw some improvement when setting the initial_max_streams_bidi transport parameter to a higher value (in our case 255), similar to how we have done in testcase "transportparameter":
+
+![Optimization](figures/optimize.png){ width=50% }
+ 
+As we can see, there are higher spikes in the beginning. Overall, the optimized implementation tended to achieve 10-30mbps higher goodput compare to the unoptimized one.
 
 # Problem 5
 a) Did you like/dislike our git/CI infrastructure setup? 
