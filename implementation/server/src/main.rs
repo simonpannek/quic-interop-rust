@@ -57,6 +57,7 @@ async fn main() {
             .log_level(LevelFilter::Off)
             .build(),
         Some("optimize") => OptionsBuilder::default()
+            .max_streams(255)
             .log_level(LevelFilter::Off)
             .build(),
         Some(unknown) => {
