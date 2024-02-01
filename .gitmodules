@@ -1,0 +1,3 @@
+[submodule "h3"]
+	path = implementation/h3
+	url = https://github.com/hyperium/h3.git

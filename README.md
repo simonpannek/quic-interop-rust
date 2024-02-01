@@ -1,5 +1,7 @@
 # QUIC project
 
+This project was written as part of the Advanced Computer Networking lecture at TUM.
+
 HTTP3 client and server written in Rust, using [rustls](https://github.com/rustls/rustls) for encryption, [quinn](https://github.com/quinn-rs/quinn) for the QUIC implementation, and [h3](https://github.com/hyperium/h3) for the HTTP/3 implementation. The code is to some part inspired from the h3 [client](https://github.com/hyperium/h3/blob/master/examples/client.rs) and [server](https://github.com/hyperium/h3/blob/master/examples/server.rs) examples.
 
 ## Why quinn?
